@@ -160,7 +160,261 @@ function setAttributes(dom, key, value) {
     }
   }
 }
-},{}],"src/react-dom/render.js":[function(require,module,exports) {
+},{}],"src/react-dom/diff.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.diff = diff;
+exports.diffNode = diffNode;
+
+var _react = require("../react");
+
+var _dom = require("./dom");
+
+var _render = require("./render");
+
+function _toConsumableArray(arr) { return _arrayWithoutHoles(arr) || _iterableToArray(arr) || _nonIterableSpread(); }
+
+function _nonIterableSpread() { throw new TypeError("Invalid attempt to spread non-iterable instance"); }
+
+function _iterableToArray(iter) { if (Symbol.iterator in Object(iter) || Object.prototype.toString.call(iter) === "[object Arguments]") return Array.from(iter); }
+
+function _arrayWithoutHoles(arr) { if (Array.isArray(arr)) { for (var i = 0, arr2 = new Array(arr.length); i < arr.length; i++) { arr2[i] = arr[i]; } return arr2; } }
+
+//对比当前真实的DOM和虚拟DOM，在对比过程中直接更新真实DOM
+//只对比同一层级的变化
+
+/*  
+@param {HTMLELement} dom 真实DOM
+@param {vnode} vNode 虚拟DOM
+@param {HTMLElement} container 真实容器DOM
+@return {HTMLElement} 更新后真实DOM
+*/
+//对比节点及子节点并连在container节点下面
+function diff(dom, vNode, container) {
+  var result = diffNode(dom, vNode);
+
+  if (container && result.parentNode !== container) {
+    container.appendChild(result);
+  }
+
+  return result;
+} //@return {HTMLElement}
+//对比节点及子节点
+//若节点不一样则直接删除旧节点并将子节点全部连在新生成节点上面
+
+
+function diffNode(dom, vNode) {
+  var newDom = dom;
+
+  if (vNode === undefined || vNode === null || typeof vNode === "boolean") {
+    vNode = "";
+  }
+
+  if (typeof vNode === "number") {
+    vNode = vNode.toString();
+  } //对比text node
+
+
+  if (typeof vNode === "string") {
+    //dom为文字且与vNode不同
+    if (dom && dom.nodeType === 3 && dom.textContent !== vNode) {
+      dom.textContent = vNode;
+    } else {
+      //若之前DOM不是文字节点则新建一个文字节点并删除旧节点
+      newDom = document.createTextNode(vNode);
+
+      if (dom && dom.parentNode) {
+        dom.parentNode.replaceChild(newDom, dom);
+      }
+    }
+
+    return newDom;
+  } //函数或类型组件
+
+
+  if (typeof vNode.tag === "function") {
+    return diffComponent(dom, vNode);
+  } //若vNode与dom的类型不一样则生成一个新dom替换原来dom
+
+
+  if (!dom || !isSameNodeType(dom, vNode)) {
+    newDom = document.createElement(vNode.tag);
+
+    if (dom) {
+      //把所以子节点(不止底下一层)全部连在newDom上
+      var children = _toConsumableArray(dom.childNodes);
+
+      children.map(function (child) {
+        return newDom.appendChild(child);
+      }); //把dom替换成newDom并移除dom
+
+      if (dom.parentNode) {
+        dom.parentNode.replaceChild(newDom, dom);
+      }
+    }
+  }
+
+  if (vNode.children && vNode.children.length > 0 || newDom.childNodes && newDom.childNodes.length > 0) {
+    diffChildren(newDom, vNode);
+  }
+
+  diffAttributes(newDom, vNode);
+  return newDom;
+} //更新自定义组件 
+//@return { HTMLELement }   
+
+
+function diffComponent(dom, vNode) {
+  var compoent = dom && dom._component;
+  var oldDom = dom; //组件类型无变化,则可以只更新props
+
+  if (compoent && compoent.constructor === vNode.tag) {
+    (0, _render.setComponentProps)(compoent, vNode.attrs);
+    dom = compoent.base; //组件类型有变化则移除原组件并渲染新组件
+  } else {
+    if (compoent) {
+      (0, _render.unmountComponent)(compoent);
+      oldDom = null;
+    }
+
+    compoent = (0, _render.createComponent)(vNode.tag, vNode.attrs);
+    (0, _render.setComponentProps)(compoent, vNode.attrs); //将重新生成的新dom(component.base)赋给dom
+
+    dom = compoent.base; //对比旧dom与新dom,并决定是否移除旧dom
+
+    if (oldDom && oldDom !== dom) {
+      oldDom._component = null;
+      removeNode(oldDom);
+    }
+  }
+
+  return dom;
+} //对比并更新dom节点的attributes
+
+
+function diffAttributes(dom, vNode) {
+  var domAttrs = {};
+  var vNodeAttrs = vNode.attrs;
+
+  for (var i = 0; i < dom.attributes.length; i++) {
+    var attr = dom.attributes[i];
+    domAttrs[attr.name] = attr.value;
+  }
+
+  for (var name in domAttrs) {
+    //若原属性不在vNode中,则置为null
+    //若属性值不同则更新为vNode的属性
+    if (!(name in vNodeAttrs)) {
+      (0, _dom.setAttributes)(dom, name, null);
+    }
+  }
+
+  for (var _name in vNodeAttrs) {
+    if (domAttrs[_name] !== vNodeAttrs[_name]) {
+      (0, _dom.setAttributes)(dom, _name, vNodeAttrs[_name]);
+    }
+  }
+} //更新子节点,子节点为数组有key值
+
+
+function diffChildren(dom, vNode) {
+  var domChildren = dom.childNodes;
+  var vNodeChildren = vNode.children;
+  var map = {}; //有key的节点,{key:childNode}
+
+  var noKey = []; //没有key的节点
+
+  if (domChildren.length > 0) {
+    //有key值的放入map中,没有的放入noKey数组中
+    for (var i = 0; i < domChildren.length; i++) {
+      var child = domChildren[i],
+          key = child.key;
+
+      if (key) {
+        map[key] = child;
+      } else {
+        noKey.push(child);
+      }
+    }
+  }
+
+  if (vNodeChildren && vNodeChildren.length > 0) {
+    var min = 0;
+    var noKeyLen = noKey.length;
+
+    for (var _i = 0; _i < vNodeChildren.length; _i++) {
+      var vChild = vNodeChildren[_i],
+          _key = vChild.key;
+
+      var _child = void 0; //有key,找到对应map中的实际DOM节点
+
+
+      if (_key) {
+        if (map[_key]) {
+          _child = map[_key];
+          map[_key] = null;
+        } //没有key,在noKey数组中找一个相同类型的DOM节点
+
+      } else if (min < noKeyLen) {
+        for (var j = min; j < noKeyLen; j++) {
+          var component = noKey[j];
+
+          if (component && isSameNodeType(component, vChild)) {
+            _child = component;
+            noKey[j] = null;
+            if (j === noKeyLen - 1) noKeyLen--;
+            if (j === min) min++;
+            break;
+          }
+        }
+      } //更新子节点真实DOM
+
+
+      _child = diff(_child, vChild);
+      var domChild = domChildren[_i];
+
+      if (_child && _child !== dom && _child !== domChild) {
+        //如果无更新前节点,则此节点为新增
+        if (!domChild) {
+          dom.appendChild(_child); //若更新后节点与更新前下一个节点一样
+        } else if (_child === domChild.nextSibling) {
+          removeNode(domChild); //将更新后节点移动
+        } else {
+          dom.insertBefore(_child, domChild);
+        }
+      }
+    }
+  }
+} //查看真实DOM与虚拟的是否为同类型
+//@param {HTMLElement}dom 真实DOM
+//@param {vnode} vNode 虚拟DOM
+//@return {boolean}
+
+
+function isSameNodeType(dom, vNode) {
+  if (typeof vNode === "string" || typeof vNode === "number") {
+    return dom.nodeType === 3;
+  } //原生组件对比
+
+
+  if (typeof vNode.tag === "string") {
+    return dom.nodeName.toLowerCase() === vNode.tag.toLowerCase();
+  } //自定义组件对比,dom._component是真实DOM对应的instance
+
+
+  return dom && dom._component && dom._component.constructor === vNode.tag;
+} //移除实际DOM
+
+
+function removeNode(dom) {
+  if (dom && dom.parentNode) {
+    dom.parentNode.removeChild(dom);
+  }
+}
+},{"../react":"src/react/index.js","./dom":"src/react-dom/dom.js","./render":"src/react-dom/render.js"}],"src/react-dom/render.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -176,8 +430,11 @@ var _component = _interopRequireDefault(require("../react/component"));
 
 var _dom = require("./dom");
 
+var _diff = require("./diff");
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
+//不用diff的递归渲染,O(n ^ 3)复杂度
 //@param {vnodde} vNode
 //{return:HTMLDom}
 function _render(vNode) {
@@ -215,7 +472,9 @@ function _render(vNode) {
   });
   return dom;
 } //返回类组件或函数型组件扩展为类组件的实例
-//{return:React.Component}
+//@param{ Function || Component } component
+//@param{ Object } props 属性
+//@return{ Component }
 
 
 function createComponent(component, props) {
@@ -254,7 +513,8 @@ function setComponentProps(component, props) {
 
   component.props = props;
   renderComponent(component);
-} //用于渲染组件,输入为类组件
+} //@param { Component } component
+//用于渲染组件,输入为类组件
 //component.base保存的是实际DOM，
 //反过来base._component保存的是dom对象所对应的instance实例，为了把他们关联起来
 //可实现componentWillUpdate,componentDidUpdate,componentDidMount
@@ -267,9 +527,10 @@ function renderComponent(component) {
 
   if (component.base && component.componentWillUpdate) {
     component.componentWillUpdate();
-  }
+  } // base = _render(render);//用虚拟dom生成实际DOM,O(n ^ 3)
 
-  base = _render(render); //用虚拟dom生成实际DOM
+
+  base = (0, _diff.diffNode)(component.base, render); //diff算法,更新实际DOM
   //更新实际DOM之后触发componentDidXXXX事件
 
   if (component.base) {
@@ -281,14 +542,15 @@ function renderComponent(component) {
   }
 
   if (component.base && component.base.parentNode) {
-    //将component.base替换成base
+    //将旧节点(component.base)替换成base
     //更新此节点为重新渲染后的节点base,并重新绑定
     component.base.parentNode.replaceChild(base, component.base);
   }
 
   component.base = base;
   base._component = component;
-}
+} //在实际DOM中移除component节点
+
 
 function unmountComponent(component) {
   if (component.componentWillUnmount) {
@@ -296,15 +558,17 @@ function unmountComponent(component) {
   }
 
   removeNode(component.base);
-} //将_render函数后返回的实际DOM再绑到container DOM下面
+} //将_render函数后返回的实际DOM再绑到container DOM下面(o(n^3))
+//用diff算法更新dom
 //并返回实际DOM container节点
 
 
-function render(vNode, container) {
+function render(vNode, container, dom) {
   //mount rendered dom to container
-  return container.appendChild(_render(vNode));
+  // return container.appendChild(_render(vNode));
+  return (0, _diff.diff)(dom, vNode, container);
 }
-},{"../react/component":"src/react/component.js","./dom":"src/react-dom/dom.js"}],"src/react/setState-queue.js":[function(require,module,exports) {
+},{"../react/component":"src/react/component.js","./dom":"src/react-dom/dom.js","./diff":"src/react-dom/diff.js"}],"src/react/setState-queue.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -365,7 +629,7 @@ function flush() {
 
 
   while (renderQueue.length !== 0) {
-    component = _render.renderComponent.shift();
+    component = renderQueue.shift();
     (0, _render.renderComponent)(component);
   }
 }

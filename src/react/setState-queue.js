@@ -41,7 +41,7 @@ function flush() {
     }
     //依次渲染component
     while (renderQueue.length !== 0) {
-        component = renderComponent.shift();
+        component = renderQueue.shift();
         renderComponent(component);
     }
 }

@@ -1,7 +1,8 @@
 import Component from '../react/component';
 import { setAttributes } from './dom';
+import { diffNode,diff } from './diff';
 
-
+//不用diff的递归渲染,O(n ^ 3)复杂度
 //@param {vnodde} vNode
 //{return:HTMLDom}
 function _render(vNode) {
@@ -36,7 +37,9 @@ function _render(vNode) {
 
 
 //返回类组件或函数型组件扩展为类组件的实例
-//{return:React.Component}
+//@param{ Function || Component } component
+//@param{ Object } props 属性
+//@return{ Component }
 export function createComponent(component,props) {
     let instance;
     //若为类组件则可以直接返回实例,且有render方法
@@ -72,6 +75,7 @@ export function setComponentProps(component,props) {
     renderComponent(component);
 }
 
+//@param { Component } component
 //用于渲染组件,输入为类组件
 //component.base保存的是实际DOM，
 //反过来base._component保存的是dom对象所对应的instance实例，为了把他们关联起来
@@ -83,7 +87,10 @@ export function renderComponent(component) {
     if (component.base && component.componentWillUpdate) {
         component.componentWillUpdate();
     }
-    base = _render(render);//用虚拟dom生成实际DOM
+
+    // base = _render(render);//用虚拟dom生成实际DOM,O(n ^ 3)
+
+    base = diffNode(component.base,render); //diff算法,更新实际DOM
     //更新实际DOM之后触发componentDidXXXX事件
     if(component.base) {
         if (component.componentDidUpdate) {
@@ -93,7 +100,7 @@ export function renderComponent(component) {
         component.componentDidMount();    
     }
     if (component.base && component.base.parentNode) {
-        //将component.base替换成base
+        //将旧节点(component.base)替换成base
         //更新此节点为重新渲染后的节点base,并重新绑定
         component.base.parentNode.replaceChild(base,component.base);
     }
@@ -101,6 +108,7 @@ export function renderComponent(component) {
     base._component = component;
 }
 
+//在实际DOM中移除component节点
 export function unmountComponent(component) {
     if (component.componentWillUnmount) {
         component.componentWillUnmount();
@@ -108,9 +116,12 @@ export function unmountComponent(component) {
     removeNode(component.base);
 }
 
-//将_render函数后返回的实际DOM再绑到container DOM下面
+//将_render函数后返回的实际DOM再绑到container DOM下面(o(n^3))
+//用diff算法更新dom
 //并返回实际DOM container节点
-export function render(vNode,container) {
+export function render(vNode,container,dom) {
     //mount rendered dom to container
-    return container.appendChild(_render(vNode));
+    // return container.appendChild(_render(vNode));
+
+    return diff(dom,vNode,container);
 }

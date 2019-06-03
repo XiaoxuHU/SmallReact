@@ -11,6 +11,7 @@ import { unmountComponent,setComponentProps,createComponent } from './render';
 @param {HTMLElement} container 真实容器DOM
 @return {HTMLElement} 更新后真实DOM
 */
+//对比节点及子节点并连在container节点下面
 export function diff(dom,vNode,container) { 
     const result = diffNode(dom,vNode);
     if (container && result.parentNode !== container) {
@@ -20,7 +21,9 @@ export function diff(dom,vNode,container) {
 }
 
 //@return {HTMLElement}
-function diffNode(dom,vNode) {
+//对比节点及子节点
+//若节点不一样则直接删除旧节点并将子节点全部连在新生成节点上面
+export function diffNode(dom,vNode) {
     let newDom = dom;
     if (vNode === undefined || vNode === null || typeof vNode === "boolean") {
         vNode = "";
@@ -34,7 +37,7 @@ function diffNode(dom,vNode) {
         if (dom && dom.nodeType === 3 && dom.textContent !== vNode) {
             dom.textContent = vNode;    
         } else {
-            //若之前DOM不是文字节点则新建一个文字节点并删除之前的
+            //若之前DOM不是文字节点则新建一个文字节点并删除旧节点
             newDom = document.createTextNode(vNode);
             if (dom && dom.parentNode) {
                 dom.parentNode.replaceChild(newDom,dom);
@@ -44,7 +47,7 @@ function diffNode(dom,vNode) {
     }
     //函数或类型组件
     if (typeof vNode.tag === "function") {
-        diffComponent(dom,vNode);
+        return diffComponent(dom,vNode);
     }
     //若vNode与dom的类型不一样则生成一个新dom替换原来dom
     if(!dom || !isSameNodeType(dom,vNode)) {
@@ -60,21 +63,22 @@ function diffNode(dom,vNode) {
         }
     }
     if((vNode.children && vNode.children.length > 0) || (newDom.childNodes && newDom.childNodes.length > 0)){
-        diffChildren(dom,vNode);
+        diffChildren(newDom,vNode);
     }
     diffAttributes(newDom,vNode);
     return newDom;
 }
 
-//更新自定义组件    
+//更新自定义组件 
+//@return { HTMLELement }   
 function diffComponent(dom,vNode) {
     let compoent = dom && dom._component;
     let oldDom = dom;
     //组件类型无变化,则可以只更新props
-    //组件类型有变化则移除原组件并渲染新组件
     if (compoent && compoent.constructor === vNode.tag) {
         setComponentProps(compoent,vNode.attrs);
         dom = compoent.base;
+    //组件类型有变化则移除原组件并渲染新组件
     } else {
         if (compoent) {
             unmountComponent(compoent);
@@ -82,9 +86,10 @@ function diffComponent(dom,vNode) {
         }
         compoent = createComponent(vNode.tag,vNode.attrs);
         setComponentProps(compoent,vNode.attrs);
+        //将重新生成的新dom(component.base)赋给dom
         dom = compoent.base;
-
-        if (!oldDom && dom !== oldDom) {
+        //对比旧dom与新dom,并决定是否移除旧dom
+        if (oldDom && oldDom !== dom) {
             oldDom._component = null;
             removeNode(oldDom);
         }
@@ -100,12 +105,15 @@ function diffAttributes(dom,vNode) {
         let attr = dom.attributes[i];
         domAttrs[attr.name] = attr.value;
     }
-    for (let name of domAttrs) {
+    for (let name in domAttrs) {
         //若原属性不在vNode中,则置为null
         //若属性值不同则更新为vNode的属性
         if(!(name in vNodeAttrs)) {
             setAttributes(dom,name,null);
-        }else if (domAttrs[name] !== vNodeAttrs[name]) {
+        }
+    }
+    for (let name in vNodeAttrs) {
+        if (domAttrs[name] !== vNodeAttrs[name]) {
             setAttributes(dom,name,vNodeAttrs[name]);
         }
     }
@@ -115,7 +123,7 @@ function diffAttributes(dom,vNode) {
 function diffChildren(dom,vNode) {
     const domChildren = dom.childNodes;
     const vNodeChildren = vNode.children;
-    const map = {};//有key的节点
+    const map = {};//有key的节点,{key:childNode}
     const noKey = [];//没有key的节点
     if (domChildren.length > 0) {
         //有key值的放入map中,没有的放入noKey数组中
@@ -134,12 +142,13 @@ function diffChildren(dom,vNode) {
         for (let i = 0;i < vNodeChildren.length;i++) {
             let vChild = vNodeChildren[i],key = vChild.key;
             let child;
-            //有key,找到对应节点
+            //有key,找到对应map中的实际DOM节点
             if (key) {
                 if (map[key]) {
                     child = map[key];
                     map[key] = null;
                 }
+            //没有key,在noKey数组中找一个相同类型的DOM节点
             } else if (min < noKeyLen) {
                 for (let j = min;j < noKeyLen;j++) {
                     let component = noKey[j];
@@ -152,9 +161,9 @@ function diffChildren(dom,vNode) {
                     } 
                 }
             }
+            //更新子节点真实DOM
             child = diff(child,vChild);
-            //更新DOM
-            const domChild = domChildren[i];
+            let domChild = domChildren[i];
             if (child && child !== dom && child !== domChild) {
                 //如果无更新前节点,则此节点为新增
                 if (!domChild) {
@@ -185,6 +194,13 @@ function isSameNodeType(dom,vNode) {
     }
     //自定义组件对比,dom._component是真实DOM对应的instance
     return dom && dom._component && dom._component.constructor === vNode.tag;
+}
+
+//移除实际DOM
+function removeNode(dom) {
+    if (dom && dom.parentNode) {
+        dom.parentNode.removeChild(dom);
+    }
 }
 
 
