@@ -4,10 +4,12 @@
 //attrs:DOM的attributes,为object
 //剩下的参数为子DOM
 function createElement(tag,attrs,...children){
+    attrs = attrs || {};
     return {
         tag,
         attrs,
-        children
+        children,
+        key:attrs.key || null,
     }
 }
 

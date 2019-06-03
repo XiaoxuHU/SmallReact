@@ -1,4 +1,4 @@
-import { renderComponent } from '../react-dom/render';
+import { enqueueSetState } from './setState-queue';
 
 //React.Component
 class Component{
@@ -7,9 +7,8 @@ class Component{
         this.props = props;
     }
     setState(stateChange) {
-        //将stateChange的属性全部拷贝到this.state上面
-        Object.assign(this.state,stateChange);
-        renderComponent(this);
+        //异步更新setState
+        enqueueSetState(stateChange,this);
     }
 }
 

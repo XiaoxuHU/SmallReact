@@ -166,7 +166,10 @@ function setAttributes(dom, key, value) {
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
+exports.createComponent = createComponent;
+exports.setComponentProps = setComponentProps;
 exports.renderComponent = renderComponent;
+exports.unmountComponent = unmountComponent;
 exports.render = render;
 
 var _component = _interopRequireDefault(require("../react/component"));
@@ -175,7 +178,7 @@ var _dom = require("./dom");
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-//虚拟DOM => 实际DOM
+//@param {vnodde} vNode
 //{return:HTMLDom}
 function _render(vNode) {
   if (vNode === undefined || vNode === null || typeof vNode === "boolean") {
@@ -234,9 +237,8 @@ function createComponent(component, props) {
   } //返回instance(base,render方法,props属性)
 
 
-  console.log(instance);
   return instance;
-} //更新props
+} //更新组件props
 //实现componentWillMount和componentWillReceiveProps方法
 
 
@@ -302,7 +304,72 @@ function render(vNode, container) {
   //mount rendered dom to container
   return container.appendChild(_render(vNode));
 }
-},{"../react/component":"src/react/component.js","./dom":"src/react-dom/dom.js"}],"src/react/component.js":[function(require,module,exports) {
+},{"../react/component":"src/react/component.js","./dom":"src/react-dom/dom.js"}],"src/react/setState-queue.js":[function(require,module,exports) {
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.enqueueSetState = enqueueSetState;
+
+var _render = require("../react-dom/render");
+
+//异步进行setState,使得setState不至于太过频繁
+var queue = [];
+var renderQueue = []; //渲染组件队列,不会有重复组件
+//延迟执行fn
+
+function defer(fn) {
+  return Promise.resolve().then(fn);
+}
+
+function enqueueSetState(stateChange, component) {
+  if (queue.length === 0) {
+    defer(flush);
+  }
+
+  queue.push({
+    stateChange: stateChange,
+    component: component
+  }); //若renderQueue中没有component才将其放入renderQueue
+
+  if (!renderQueue.some(function (item) {
+    return item === component;
+  })) {
+    renderQueue.push(component);
+  }
+}
+
+function flush() {
+  var component; //将queue中的setState整合起来
+
+  while (queue.length !== 0) {
+    var _queue$shift = queue.shift(),
+        stateChange = _queue$shift.stateChange,
+        _component = _queue$shift.component; //若没有prevState则初始化prevState为当前state
+
+
+    if (!_component.prevState) {
+      _component.prevState = Object.assign({}, _component.state);
+    } //若setState传入为函数
+
+
+    if (typeof stateChange === "function") {
+      Object.assign(_component.state, stateChange(_component.prevState, _component.state)); //若setState传入为对象
+    } else {
+      Object.assign(_component.state, stateChange);
+    }
+
+    _component.prevState = _component.state;
+  } //依次渲染component
+
+
+  while (renderQueue.length !== 0) {
+    component = _render.renderComponent.shift();
+    (0, _render.renderComponent)(component);
+  }
+}
+},{"../react-dom/render":"src/react-dom/render.js"}],"src/react/component.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -310,7 +377,7 @@ Object.defineProperty(exports, "__esModule", {
 });
 exports.default = void 0;
 
-var _render = require("../react-dom/render");
+var _setStateQueue = require("./setState-queue");
 
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
@@ -334,9 +401,8 @@ function () {
   _createClass(Component, [{
     key: "setState",
     value: function setState(stateChange) {
-      //将stateChange的属性全部拷贝到this.state上面
-      Object.assign(this.state, stateChange);
-      (0, _render.renderComponent)(this);
+      //异步更新setState
+      (0, _setStateQueue.enqueueSetState)(stateChange, this);
     }
   }]);
 
@@ -345,7 +411,7 @@ function () {
 
 var _default = Component;
 exports.default = _default;
-},{"../react-dom/render":"src/react-dom/render.js"}],"src/react/createElement.js":[function(require,module,exports) {
+},{"./setState-queue":"src/react/setState-queue.js"}],"src/react/createElement.js":[function(require,module,exports) {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", {
@@ -362,10 +428,12 @@ function createElement(tag, attrs) {
     children[_key - 2] = arguments[_key];
   }
 
+  attrs = attrs || {};
   return {
     tag: tag,
     attrs: attrs,
-    children: children
+    children: children,
+    key: attrs.key || null
   };
 }
 

@@ -1,7 +1,8 @@
 import Component from '../react/component';
 import { setAttributes } from './dom';
 
-//虚拟DOM => 实际DOM
+
+//@param {vnodde} vNode
 //{return:HTMLDom}
 function _render(vNode) {
     if (vNode === undefined || vNode === null ||typeof vNode === "boolean") {
@@ -36,7 +37,7 @@ function _render(vNode) {
 
 //返回类组件或函数型组件扩展为类组件的实例
 //{return:React.Component}
-function createComponent(component,props) {
+export function createComponent(component,props) {
     let instance;
     //若为类组件则可以直接返回实例,且有render方法
     if(component.prototype && component.prototype.render) {
@@ -53,13 +54,12 @@ function createComponent(component,props) {
         }
     }
     //返回instance(base,render方法,props属性)
-    console.log(instance);
     return instance;
 }
 
-//更新props
+//更新组件props
 //实现componentWillMount和componentWillReceiveProps方法
-function setComponentProps(component,props) {
+export function setComponentProps(component,props) {
     //生成实际DOM前触发componentWilMount方法
     if(!component.base) {
         if (component.componentWillMount) {
@@ -101,7 +101,7 @@ export function renderComponent(component) {
     base._component = component;
 }
 
-function unmountComponent(component) {
+export function unmountComponent(component) {
     if (component.componentWillUnmount) {
         component.componentWillUnmount();
     }
