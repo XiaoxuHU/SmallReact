@@ -359,6 +359,8 @@ function diffChildren(dom, vNode) {
         } //没有key,在noKey数组中找一个相同类型的DOM节点
 
       } else if (min < noKeyLen) {
+        console.log(min, noKeyLen);
+
         for (var j = min; j < noKeyLen; j++) {
           var component = noKey[j];
 
@@ -791,25 +793,15 @@ function (_React$Component) {
 
     _this = _possibleConstructorReturn(this, _getPrototypeOf(Counter).call(this, props));
     _this.state = {
-      num: 0
+      num: 0,
+      s: "times"
     };
     return _this;
   }
 
   _createClass(Counter, [{
-    key: "componentWillUpdate",
-    value: function componentWillUpdate() {
-      console.log('update');
-    }
-  }, {
-    key: "componentWillMount",
-    value: function componentWillMount() {
-      console.log('mount');
-    }
-  }, {
     key: "onClick",
     value: function onClick() {
-      console.log(this.state);
       this.setState({
         num: this.state.num + 1
       });
@@ -823,7 +815,7 @@ function (_React$Component) {
         onClick: function onClick() {
           return _this2.onClick();
         }
-      }, _react.default.createElement("h1", null, "number: ", this.state.num), _react.default.createElement("button", null, "add"));
+      }, "Count:", this.state.num, this.state.s);
     }
   }]);
 

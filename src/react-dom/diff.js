@@ -136,6 +136,7 @@ function diffChildren(dom,vNode) {
             }
         }
     }
+    
     if (vNodeChildren && vNodeChildren.length > 0) {
         let min = 0;
         let noKeyLen = noKey.length;
@@ -150,9 +151,11 @@ function diffChildren(dom,vNode) {
                 }
             //没有key,在noKey数组中找一个相同类型的DOM节点
             } else if (min < noKeyLen) {
+                console.log(min,noKeyLen);
                 for (let j = min;j < noKeyLen;j++) {
                     let component = noKey[j];
                     if (component && isSameNodeType(component,vChild))  {
+
                         child = component;
                         noKey[j] = null;
                         if (j === noKeyLen - 1) noKeyLen--;
